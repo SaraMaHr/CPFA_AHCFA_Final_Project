@@ -1,0 +1,4 @@
+distribution,cpfa_mean_score,ahcfa_mean_score,score_improvement_percent,paired_wins,paired_ties,paired_runs
+Random,193.5,193.8,0.15503875968992836,23,2,50
+Powerlaw,146.3,144.18,-1.4490772385509259,25,5,50
+Clustered,73.04,76.58,4.846659364731643,32,1,50
