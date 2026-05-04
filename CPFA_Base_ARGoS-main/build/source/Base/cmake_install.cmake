@@ -1,4 +1,4 @@
-# Install script for directory: /home/sara/Downloads/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/source/Base
+# Install script for directory: /mnt/c/Users/aleks/OneDrive/Desktop/Masters_Classes/Robotics/Github_Folder/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/source/Base
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -39,6 +39,6 @@ endif()
 
 # Set default install directory permissions.
 if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/bin/objdump")
+  set(CMAKE_OBJDUMP "/usr/bin/objdump")
 endif()
 

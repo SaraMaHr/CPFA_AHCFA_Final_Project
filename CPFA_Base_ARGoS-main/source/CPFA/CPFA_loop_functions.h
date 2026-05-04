@@ -9,6 +9,14 @@
 #include <deque>
 #include <map>
 #include <utility>
+#include <fstream>
+#include <sys/stat.h>
+#include <cerrno>
+#ifdef _WIN32
+    #include <direct.h>
+#else
+    #include <dirent.h>
+#endif
 
 using namespace argos;
 using namespace std;
@@ -170,6 +178,12 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 			argos::Real AdaptiveResourceWeight;
 			argos::Real AdaptiveClusterProtectWeight;
 			argos::Real AdaptiveRandomWeight;
+
+		/* Heatmap/clustering data export */
+		std::vector<argos::CVector2> VisitedPositions;  // Store all visited positions
+		std::vector<argos::CVector2> ClusterCenters;    // Store cluster centers
+		void exportVisitedPositionsToCSV(const std::string& filename);
+		bool createDirectoryIfNotExists(const std::string& dirPath);
 
 	private:
 

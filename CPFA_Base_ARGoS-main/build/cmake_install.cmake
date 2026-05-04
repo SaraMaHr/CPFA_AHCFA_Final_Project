@@ -1,4 +1,4 @@
-# Install script for directory: /home/sara/Downloads/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main
+# Install script for directory: /mnt/c/Users/aleks/OneDrive/Desktop/Masters_Classes/Robotics/Github_Folder/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -39,12 +39,12 @@ endif()
 
 # Set default install directory permissions.
 if(NOT DEFINED CMAKE_OBJDUMP)
-  set(CMAKE_OBJDUMP "/bin/objdump")
+  set(CMAKE_OBJDUMP "/usr/bin/objdump")
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
-  include("/home/sara/Downloads/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/build/source/cmake_install.cmake")
+  include("/mnt/c/Users/aleks/OneDrive/Desktop/Masters_Classes/Robotics/Github_Folder/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/build/source/cmake_install.cmake")
 
 endif()
 
@@ -56,5 +56,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/sara/Downloads/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/mnt/c/Users/aleks/OneDrive/Desktop/Masters_Classes/Robotics/Github_Folder/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

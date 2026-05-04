@@ -169,6 +169,8 @@ void CPFA_loop_functions::Reset() {
 	PheromoneList.clear();
 	FidelityList.clear();
     TargetRayList.clear();
+    VisitedPositions.clear();  // Clear visited positions for new trial
+    ClusterCenters.clear();    // Clear cluster centers for new trial
     ResetAdaptiveRegions();
     
     SetFoodDistribution();
@@ -208,6 +210,20 @@ void CPFA_loop_functions::PreStep() {
 	FidelityList.clear();
 	PheromoneList.clear();
         TargetRayList.clear();
+    }
+    static argos::Real lastExportTime = 0.0;
+    static bool directoryCreated = false;
+
+    argos::Real currentTime = getSimTimeInSeconds();
+    if(currentTime - lastExportTime >= 10.0) {
+        if(!directoryCreated) {
+            createDirectoryIfNotExists("dotplot_data");
+            directoryCreated = true;
+        }
+        
+        std::string filename = "dotplot_data/visited_positions_" + std::to_string((int)currentTime) + ".csv";
+        exportVisitedPositionsToCSV(filename);
+        lastExportTime = currentTime;
     }
 }
 
@@ -386,7 +402,8 @@ void CPFA_loop_functions::RandomFoodDistribution() {
 
  
 void CPFA_loop_functions::ClusterFoodDistribution() {
-        FoodList.clear();
+    FoodList.clear();
+	ClusterCenters.clear();  // Clear previous cluster centers
 	argos::Real     foodOffset  = 3.0 * FoodRadius;
 	size_t          foodToPlace = NumberOfClusters * ClusterWidthX * ClusterWidthY;
 	size_t          foodPlaced = 0;
@@ -400,6 +417,9 @@ void CPFA_loop_functions::ClusterFoodDistribution() {
 		while(IsOutOfBounds(placementPosition, ClusterWidthY, ClusterWidthX)) {
 			placementPosition.Set(RNG->Uniform(ForageRangeX), RNG->Uniform(ForageRangeY));
 		}
+
+		// Store cluster center (bottom-left corner of the cluster)
+		ClusterCenters.push_back(placementPosition);
 
 		for(size_t j = 0; j < ClusterWidthY; j++) {
 			for(size_t k = 0; k < ClusterWidthX; k++) {
@@ -672,6 +692,8 @@ void CPFA_loop_functions::RecordVisitedLocations(const std::vector<argos::CVecto
     if(AdaptiveRegions.empty()) ResetAdaptiveRegions();
     for(size_t i = 0; i < c_points.size(); ++i) {
         InsertAdaptiveObservation(c_points[i], false, 0);
+        // Also record for heatmap visualization
+        VisitedPositions.push_back(c_points[i]);
     }
 }
 
@@ -857,6 +879,79 @@ bool CPFA_loop_functions::IsClusteredResourceMode() {
         RecentDiscoveryTicks.pop_front();
     }
     return RecentDiscoveryTicks.size() >= AdaptiveClusterHitThreshold;
+}
+
+void CPFA_loop_functions::exportVisitedPositionsToCSV(const std::string& filename) {
+	std::ofstream file(filename);
+	if (!file.is_open()) {
+		argos::LOGERR << "Failed to open file for visited positions export: " << filename << std::endl;
+		return;
+	}
+	
+	// Write header with metadata
+	file << "# Visited Positions Export - Simulation Time: " << getSimTimeInSeconds() << " seconds" << std::endl;
+	file << "# Total Positions: " << VisitedPositions.size() << std::endl;
+	file << "# Total Adaptive Regions: " << AdaptiveRegions.size() << std::endl;
+	
+// Count leaf nodes
+	size_t leafNodeCount = 0;
+	for(size_t i = 0; i < AdaptiveRegions.size(); i++) {
+		if(AdaptiveRegions[i].IsLeaf()) {
+			leafNodeCount++;
+		}
+	}
+	file << "# Leaf Clusters (Actual Discovered Clusters): " << leafNodeCount << std::endl;
+	file << "# Format: X,Y (coordinates in meters)" << std::endl;
+	
+	// Write adaptive region (discovered clusters) information - ONLY LEAF NODES
+	file << "# Adaptive Regions (Discovered Clusters - Leaf Nodes Only):" << std::endl;
+	size_t leafClusterCount = 0;
+	for(size_t i = 0; i < AdaptiveRegions.size(); i++) {
+		const auto& region = AdaptiveRegions[i];
+		// Only export leaf nodes (actual final clusters)
+		if(region.IsLeaf()) {
+			file << "# Region " << leafClusterCount << ": [" << region.MinX << "," << region.MaxX << "] x [" 
+			     << region.MinY << "," << region.MaxY << "] Visits=" << region.Visits 
+			     << " ResourceHits=" << region.ResourceHits << std::endl;
+			leafClusterCount++;
+		}
+	}
+	file << "# Total Leaf Clusters: " << leafClusterCount << std::endl;
+	
+	file << "# === VISITED POSITIONS DATA ===" << std::endl;
+	file << "X,Y" << std::endl;
+	
+	// Write all visited positions
+	for(const auto& pos : VisitedPositions) {
+		file << pos.GetX() << "," << pos.GetY() << std::endl;
+	}
+	
+	file.close();
+	argos::LOG << "Visited positions exported to: " << filename << " (" << VisitedPositions.size() << " positions, " << AdaptiveRegions.size() << " adaptive clusters)" << std::endl;
+}
+
+bool CPFA_loop_functions::createDirectoryIfNotExists(const std::string& dirPath) {
+	struct stat info;
+	
+	// Check if directory already exists
+	if (stat(dirPath.c_str(), &info) == 0) {
+		if (info.st_mode & S_IFDIR) {
+			return true; // Directory exists
+		}
+	}
+	
+	// Try to create directory
+	#ifdef _WIN32
+		if (_mkdir(dirPath.c_str()) == 0) {
+	#else
+		if (mkdir(dirPath.c_str(), 0755) == 0) {
+	#endif
+		argos::LOG << "Created directory: " << dirPath << std::endl;
+		return true;
+	} else {
+		argos::LOGERR << "Failed to create directory: " << dirPath << std::endl;
+		return false;
+	}
 }
 
 REGISTER_LOOP_FUNCTIONS(CPFA_loop_functions, "CPFA_loop_functions")
