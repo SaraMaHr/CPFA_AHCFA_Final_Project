@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Live Clustering-based Heatmap Viewer for CPFA
 Monitors visited positions CSV files and displays live density heatmaps
