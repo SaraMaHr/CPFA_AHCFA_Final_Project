@@ -31,6 +31,8 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		void PostStep();
 		bool IsExperimentFinished();
 		void PostExperiment();
+		void RecordCollectionMilestones();
+		void ExportCollectionMilestones();
 		argos::CColor GetFloorColor(const argos::CVector2 &c_pos_on_floor);
 
 		// GA Functions
@@ -60,13 +62,12 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 			bool SelectAdaptiveSearchTarget(argos::CVector2& c_target);
 			bool IsClusteredResourceMode();
 
-		argos::Real getSimTimeInSeconds();
+			argos::Real getSimTimeInSeconds();
 
-		std::vector<argos::CColor>   TargetRayColorList;
+			std::vector<argos::CColor>   TargetRayColorList;
 
-		unsigned int getNumberOfRobots();
-        void increaseNumDistributedFoodByOne();
-		double getProbabilityOfSwitchingToSearching();
+			unsigned int getNumberOfRobots();
+			double getProbabilityOfSwitchingToSearching();
 		double getProbabilityOfReturningToNest();
 		double getUninformedSearchVariation();
 		double getRateOfInformedSearchDecay();
@@ -137,6 +138,10 @@ class CPFA_loop_functions : public argos::CLoopFunctions
                 size_t lastNumCollectedFood;
                 size_t currNumCollectedFood;
                 size_t Num_robots;
+                argos::Real CollectionTime80;
+                argos::Real CollectionTime90;
+                argos::Real CollectionTime100;
+                bool CollectionMilestonesExported;
       
                 vector<size_t>		ForageList;
 		argos::CVector2 NestPosition;
@@ -184,6 +189,7 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		void CollectAdaptiveLeaves(size_t un_region, std::vector<size_t>& vec_leaves) const;
 		argos::Real ScoreAdaptiveRegion(const AdaptiveRegion& s_region);
 		size_t CountAdaptiveTargetClaims(size_t un_region) const;
+		size_t CountAdaptiveNeighborClaims(size_t un_region) const;
 		argos::CVector2 SampleAdaptiveRegion(const AdaptiveRegion& s_region);
                 bool IsOutOfBounds(argos::CVector2 p, size_t length, size_t width);
 		bool IsCollidingWithNest(argos::CVector2 p);

@@ -84,14 +84,12 @@ void CPFA_qt_user_functions::DrawFood() {
 		y = loopFunctions.FoodList[i].GetY();
 		DrawCylinder(CVector3(x, y, 0.002), CQuaternion(), loopFunctions.FoodRadius, 0.025, loopFunctions.FoodColoringList[i]);
 	}
- 
-	 //draw food in nests
-	 for (size_t i=0; i< loopFunctions.CollectedFoodList.size(); i++)
-	 { 
-	        x = loopFunctions.CollectedFoodList[i].GetX();
-	        y = loopFunctions.CollectedFoodList[i].GetY();
-	        DrawCylinder(CVector3(x, y, 0.002), CQuaternion(), loopFunctions.FoodRadius, 0.025, CColor::BLACK);
-	  } 
+
+	for(size_t i = 0; i < loopFunctions.CollectedFoodList.size(); i++) {
+		x = loopFunctions.CollectedFoodList[i].GetX();
+		y = loopFunctions.CollectedFoodList[i].GetY();
+		DrawCylinder(CVector3(x, y, 0.002), CQuaternion(), loopFunctions.FoodRadius, 0.025, CColor::BLACK);
+	}
 }
 
 void CPFA_qt_user_functions::DrawFidelity() {

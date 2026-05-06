@@ -504,7 +504,8 @@ void CPFA_controller::Returning() {
 	    argos::Real r2 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 	    argos::Real r3 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
 	    if (isHoldingFood) { 
-          //drop off the food and display in the nest 
+          // Deposit the collected resource inside the nest. The resource is
+          // already removed from FoodList at pickup, so field density decreases.
           argos::CVector2 placementPosition;
           placementPosition.Set(LoopFunctions->NestPosition.GetX()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5), LoopFunctions->NestPosition.GetY()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5));
           
@@ -512,7 +513,6 @@ void CPFA_controller::Returning() {
               placementPosition.Set(LoopFunctions->NestPosition.GetX()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5), LoopFunctions->NestPosition.GetY()+RNG->Gaussian(LoopFunctions->NestRadius/1.2, 0.5));
      
           LoopFunctions->CollectedFoodList.push_back(placementPosition);
-          //Update the location of the nest qilu 09/10
           num_targets_collected++;
 		  LoopFunctions->currNumCollectedFood++;
           LoopFunctions->setScore(num_targets_collected);
@@ -526,20 +526,20 @@ void CPFA_controller::Returning() {
           TrailToShare.clear();  
 	    }
 
-	    // AHCFA switches between CPFA-style exploitation and QuadTree-guided
-	    // exploration based on recent resource discoveries.
+		    // AHCFA keeps CPFA exploitation after successful trips and uses
+		    // QuadTree exploration mostly after empty trips or when CPFA has
+		    // no useful pheromone/site-fidelity target.
 	    //ofstream log_output_stream;
 	    //log_output_stream.open("cpfa_log.txt", ios::app);
 	    //log_output_stream << "At the nest." << endl;	    
 	 
-	    bool clusteredMode = LoopFunctions->UseAHCFA == 1 && LoopFunctions->IsClusteredResourceMode();
-	    bool selectedTarget = false;
-	 
-	    if(LoopFunctions->UseAHCFA == 1 &&
-           ((!clusteredMode && r3 < 0.70) || (clusteredMode && r3 < 0.35))) {
-	        SetAdaptiveSearchLocation();
-	        isInformed = false;
-	        isUsingSiteFidelity = false;
+		    bool returnedWithFood = isHoldingFood;
+		    bool selectedTarget = false;
+
+		    if(LoopFunctions->UseAHCFA == 1 && !returnedWithFood && r3 < 0.85) {
+		        SetAdaptiveSearchLocation();
+		        isInformed = false;
+		        isUsingSiteFidelity = false;
 	        selectedTarget = true;
 	    }
 

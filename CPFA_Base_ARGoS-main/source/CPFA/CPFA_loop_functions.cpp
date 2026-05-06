@@ -10,6 +10,10 @@ CPFA_loop_functions::CPFA_loop_functions() :
         CollisionTime(0), 
         lastNumCollectedFood(0),
         currNumCollectedFood(0),
+        CollectionTime80(-1.0),
+        CollectionTime90(-1.0),
+        CollectionTime100(-1.0),
+        CollectionMilestonesExported(false),
 	ResourceDensityDelay(0),
 	RandomSeed(GetSimulator().GetRandomSeed()),
 	SimCounter(0),
@@ -166,6 +170,12 @@ void CPFA_loop_functions::Reset() {
     FoodList.clear();
     CollectedFoodList.clear();
     FoodColoringList.clear();
+    CollectionTime80 = -1.0;
+    CollectionTime90 = -1.0;
+    CollectionTime100 = -1.0;
+    CollectionMilestonesExported = false;
+    lastNumCollectedFood = 0;
+    currNumCollectedFood = 0;
 	PheromoneList.clear();
 	FidelityList.clear();
     TargetRayList.clear();
@@ -246,6 +256,7 @@ bool CPFA_loop_functions::IsExperimentFinished() {
 void CPFA_loop_functions::PostExperiment() {
 	  
      printf("%f, %f, %lu\n", score, getSimTimeInSeconds(), RandomSeed);
+     ExportCollectionMilestones();
        
                   
     if (PrintFinalScore == 1) {
@@ -624,18 +635,74 @@ void CPFA_loop_functions::SetTrial(unsigned int v) {
 
 void CPFA_loop_functions::setScore(double s) {
 	score = s;
+    RecordCollectionMilestones();
     
 	if (score >= NumDistributedFood) {
 		PostExperiment();
 	}
 }
 
-double CPFA_loop_functions::Score() {	
-	return score;
+void CPFA_loop_functions::RecordCollectionMilestones() {
+    if(NumDistributedFood == 0) return;
+
+    Real currentTime = getSimTimeInSeconds();
+    Real fraction = score / (Real)NumDistributedFood;
+
+    if(CollectionTime80 < 0.0 && fraction >= 0.80) {
+        CollectionTime80 = currentTime;
+    }
+    if(CollectionTime90 < 0.0 && fraction >= 0.90) {
+        CollectionTime90 = currentTime;
+    }
+    if(CollectionTime100 < 0.0 && fraction >= 1.00) {
+        CollectionTime100 = currentTime;
+    }
 }
 
-void CPFA_loop_functions::increaseNumDistributedFoodByOne(){
-    NumDistributedFood++;
+void CPFA_loop_functions::ExportCollectionMilestones() {
+    if(CollectionMilestonesExported) return;
+    CollectionMilestonesExported = true;
+
+    string distribution = "Powerlaw";
+    if(FoodDistribution == 0) distribution = "Random";
+    else if(FoodDistribution == 1) distribution = "Clustered";
+
+    string algorithm = UseAHCFA == 1 ? "AHCFA" : "CPFA";
+    string path = "results/final_project/collection_milestones.csv";
+    bool writeHeader = false;
+    {
+        ifstream existing(path.c_str());
+        writeHeader = !existing.good() || existing.peek() == ifstream::traits_type::eof();
+    }
+
+    ofstream output(path.c_str(), ios::app);
+    if(!output.is_open()) return;
+
+    if(writeHeader) {
+        output << "algorithm,distribution,seed,total_food,final_score,end_time_seconds,"
+               << "time_80,time_90,time_100,phase_80_90,phase_90_100\n";
+    }
+
+    Real phase80To90 = (CollectionTime80 >= 0.0 && CollectionTime90 >= 0.0) ?
+                       CollectionTime90 - CollectionTime80 : -1.0;
+    Real phase90To100 = (CollectionTime90 >= 0.0 && CollectionTime100 >= 0.0) ?
+                        CollectionTime100 - CollectionTime90 : -1.0;
+
+    output << algorithm << ","
+           << distribution << ","
+           << RandomSeed << ","
+           << NumDistributedFood << ","
+           << score << ","
+           << getSimTimeInSeconds() << ","
+           << CollectionTime80 << ","
+           << CollectionTime90 << ","
+           << CollectionTime100 << ","
+           << phase80To90 << ","
+           << phase90To100 << "\n";
+}
+
+double CPFA_loop_functions::Score() {	
+	return score;
 }
 
 void CPFA_loop_functions::ConfigureFromGenome(Real* g)
@@ -801,6 +868,35 @@ size_t CPFA_loop_functions::CountAdaptiveTargetClaims(size_t un_region) const {
     return count;
 }
 
+size_t CPFA_loop_functions::CountAdaptiveNeighborClaims(size_t un_region) const {
+    if(un_region >= AdaptiveRegions.size()) return 0;
+
+    const AdaptiveRegion& target = AdaptiveRegions[un_region];
+    CVector2 targetCenter((target.MinX + target.MaxX) * 0.5,
+                          (target.MinY + target.MaxY) * 0.5);
+    Real targetWidth = target.MaxX - target.MinX;
+    Real targetHeight = target.MaxY - target.MinY;
+    size_t count = 0;
+
+    for(size_t i = 0; i < AdaptiveTargetClaims.size(); ++i) {
+        size_t claimedRegion = AdaptiveTargetClaims[i].second;
+        if(claimedRegion == un_region || claimedRegion >= AdaptiveRegions.size()) continue;
+
+        const AdaptiveRegion& claimed = AdaptiveRegions[claimedRegion];
+        CVector2 claimedCenter((claimed.MinX + claimed.MaxX) * 0.5,
+                               (claimed.MinY + claimed.MaxY) * 0.5);
+        Real neighborX = std::max<Real>(targetWidth, claimed.MaxX - claimed.MinX) * 1.5;
+        Real neighborY = std::max<Real>(targetHeight, claimed.MaxY - claimed.MinY) * 1.5;
+
+        if(std::fabs(targetCenter.GetX() - claimedCenter.GetX()) <= neighborX &&
+           std::fabs(targetCenter.GetY() - claimedCenter.GetY()) <= neighborY) {
+            count++;
+        }
+    }
+
+    return count;
+}
+
 CVector2 CPFA_loop_functions::SampleAdaptiveRegion(const AdaptiveRegion& s_region) {
     Real margin = std::min<Real>(0.05, std::min(s_region.MaxX - s_region.MinX,
                                                s_region.MaxY - s_region.MinY) * 0.25);
@@ -822,7 +918,9 @@ bool CPFA_loop_functions::SelectAdaptiveSearchTarget(argos::CVector2& c_target) 
     CollectAdaptiveLeaves(0, leaves);
 
     for(size_t i = 0; i < leaves.size(); ++i) {
-        Real balancingPenalty = 1.0 + (Real)CountAdaptiveTargetClaims(leaves[i]);
+        Real balancingPenalty = 1.0 +
+                                (Real)CountAdaptiveTargetClaims(leaves[i]) +
+                                0.2 * (Real)CountAdaptiveNeighborClaims(leaves[i]);
         Candidate c = {ScoreAdaptiveRegion(AdaptiveRegions[leaves[i]]) / balancingPenalty, leaves[i]};
         candidates.push_back(c);
     }
