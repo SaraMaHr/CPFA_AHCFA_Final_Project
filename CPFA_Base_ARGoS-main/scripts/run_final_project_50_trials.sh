@@ -3,6 +3,23 @@ set -euo pipefail
 
 mkdir -p results/final_project
 
+rm -f \
+  results/random_CPFA_r24_tag256_10by10_quard_arena_0_ForageData.txt \
+  results/random_AHCFA_r24_tag256_10by10_quard_arena_0_ForageData.txt \
+  results/powerlaw_CPFA_r24_tag256_10by10_quard_arena_0_ForageData.txt \
+  results/powerlaw_AHCFA_r24_tag256_10by10_quard_arena_0_ForageData.txt \
+  results/cluster_CPFA_r24_tag256_10by10_quard_arena_0_ForageData.txt \
+  results/cluster_AHCFA_r24_tag256_10by10_quard_arena_0_ForageData.txt \
+  results/random_CPFA_r24_tag256_10by10_quard_arena_0_iAntTagData.txt \
+  results/random_AHCFA_r24_tag256_10by10_quard_arena_0_iAntTagData.txt \
+  results/powerlaw_CPFA_r24_tag256_10by10_quard_arena_0_iAntTagData.txt \
+  results/powerlaw_AHCFA_r24_tag256_10by10_quard_arena_0_iAntTagData.txt \
+  results/cluster_CPFA_r24_tag256_10by10_quard_arena_0_iAntTagData.txt \
+  results/cluster_AHCFA_r24_tag256_10by10_quard_arena_0_iAntTagData.txt \
+  results/final_project/collection_milestones.csv \
+  results/final_project/visit_heatmap_cells.csv \
+  results/final_project/adaptive_quadtree_regions.csv
+
 combined="results/final_project/final_project_cpfa_ahcfa_50runs.csv"
 echo "algorithm,distribution,score,time_seconds,seed" > "$combined"
 

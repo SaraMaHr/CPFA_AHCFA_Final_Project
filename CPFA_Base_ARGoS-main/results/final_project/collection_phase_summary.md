@@ -1,5 +1,5 @@
 | distribution | cpfa_4min_mean | cpfa_8min_mean | cpfa_12min_mean | ahcfa_4min_mean | ahcfa_8min_mean | ahcfa_12min_mean | 4min_improvement_percent | 8min_improvement_percent | 12min_improvement_percent |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Random | 81.2 | 143.78 | 193.55 | 81.72 | 143.87 | 193.82 | 0.64 | 0.06 | 0.14 |
-| Powerlaw | 60.76 | 109.36 | 146.22 | 61.4 | 108.39 | 143.06 | 1.05 | -0.89 | -2.16 |
-| Clustered | 24.62 | 50.27 | 72.77 | 25.73 | 51.35 | 75.75 | 4.52 | 2.14 | 4.09 |
+| Random | 25.54 | 45.3 | 68.24 | 25.54 | 45.3 | 68.24 | 0.0 | 0.0 | 0.0 |
+| Powerlaw | 28.52 | 54.08 | 81.24 | 31.26 | 60.2 | 91.98 | 9.61 | 11.32 | 13.22 |
+| Clustered | 24.38 | 48.04 | 70.08 | 25.56 | 50.46 | 74.4 | 4.84 | 5.04 | 6.16 |

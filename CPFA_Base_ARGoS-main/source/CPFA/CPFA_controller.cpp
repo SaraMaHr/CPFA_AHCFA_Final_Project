@@ -1,4 +1,5 @@
 #include "CPFA_controller.h"
+#include <algorithm>
 #include <unistd.h>
 
 CPFA_controller::CPFA_controller() :
@@ -18,11 +19,13 @@ CPFA_controller::CPFA_controller() :
         searchingTime(0),
         travelingTime(0),
         startTime(0),
-    m_pcLEDs(NULL),
-        updateFidelity(false),
-        LastVisitSampleTick(0),
-        VisitSamplePeriodTicks(0),
-        MaxVisitedLocations(20)
+	    m_pcLEDs(NULL),
+	        updateFidelity(false),
+	        LastVisitSampleTick(0),
+	        VisitSamplePeriodTicks(0),
+	        MaxVisitedLocations(20),
+	        AdaptiveSweepIndex(0),
+	        IsUsingAdaptiveSweep(false)
 {
 }
 
@@ -138,9 +141,12 @@ void CPFA_controller::Reset() {
 	isHoldingFood = false;
 	isUsingSiteFidelity = false;
 	isGivingUpSearch = false;
-    VisitedLocationQueue.clear();
-    LastVisitSampleTick = 0;
-}
+	    VisitedLocationQueue.clear();
+	    LastVisitSampleTick = 0;
+	    AdaptiveSweepTargets.clear();
+	    AdaptiveSweepIndex = 0;
+	    IsUsingAdaptiveSweep = false;
+	}
 
 bool CPFA_controller::IsHoldingFood() {
 		return isHoldingFood;
@@ -335,19 +341,25 @@ void CPFA_controller::Searching() {
      // If we reached our target search location, set a new one. The 
      // new search location calculation is different based on whether
      // we are currently using informed or uninformed search.
-     if(distance.SquareLength() < TargetDistanceTolerance) {
-         // randomly give up searching
-         if(SimulationTick()% (5*SimulationTicksPerSecond())==0 && random < LoopFunctions->ProbabilityOfReturningToNest) {
+	     if(distance.SquareLength() < TargetDistanceTolerance) {
+	         if(isInformed == false && ContinueAdaptiveSweep()) {
+	             return;
+	         }
+	         // randomly give up searching
+	         if(SimulationTick()% (5*SimulationTicksPerSecond())==0 && random < LoopFunctions->ProbabilityOfReturningToNest) {
              
              SetFidelityList();
 	      TrailToShare.clear();
              SetIsHeadingToNest(true);
              SetTarget(LoopFunctions->NestPosition);
              isGivingUpSearch = true;
-	     LoopFunctions->FidelityList.erase(controllerID);
-             isUsingSiteFidelity = false; 
-             updateFidelity = false; 
-             CPFA_state = RETURNING;
+		     LoopFunctions->FidelityList.erase(controllerID);
+	             isUsingSiteFidelity = false; 
+	             updateFidelity = false; 
+	             AdaptiveSweepTargets.clear();
+	             AdaptiveSweepIndex = 0;
+	             IsUsingAdaptiveSweep = false;
+	             CPFA_state = RETURNING;
              searchingTime+=SimulationTick()-startTime;
              startTime = SimulationTick();
 
@@ -488,10 +500,16 @@ void CPFA_controller::Surveying() {
  * up on searching and is returning to the nest.
  *****/
 void CPFA_controller::Returning() {
- //LOG<<"Returning..."<<endl;
-	//SetHoldingFood();
+	 //LOG<<"Returning..."<<endl;
+		if(LoopFunctions->UseAHCFA == 1 &&
+		   LoopFunctions->FoodDistribution != 0 &&
+		   !IsHoldingFood() &&
+		   (SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
+		    SetHoldingFood();
+		    if(IsHoldingFood()) return;
+		}
 
-	// Are we there yet? (To the nest, that is.)
+		// Are we there yet? (To the nest, that is.)
 	if(IsInTheNest()) {
         if(LoopFunctions->UseAHCFA == 1) {
             UploadVisitedLocations();
@@ -535,11 +553,18 @@ void CPFA_controller::Returning() {
 	 
 		    bool returnedWithFood = isHoldingFood;
 		    bool selectedTarget = false;
+		    bool clusteredMode = LoopFunctions->UseAHCFA == 1 && LoopFunctions->IsClusteredResourceMode();
+		    Real minutes = LoopFunctions->getSimTimeInSeconds() / 60.0;
+		    Real adaptiveProbability = 0.0;
+		    if(minutes >= 8.0) adaptiveProbability = 0.25;
+		    else if(minutes >= 4.0) adaptiveProbability = 0.05;
+		    if(LoopFunctions->FoodDistribution == 0) adaptiveProbability = 0.0;
+		    if(clusteredMode) adaptiveProbability = std::min<Real>(adaptiveProbability, 0.05);
 
-		    if(LoopFunctions->UseAHCFA == 1 && !returnedWithFood && r3 < 0.85) {
-		        SetAdaptiveSearchLocation();
-		        isInformed = false;
-		        isUsingSiteFidelity = false;
+			    if(LoopFunctions->UseAHCFA == 1 && !returnedWithFood && r3 < adaptiveProbability) {
+			        SetAdaptiveSearchLocation();
+			        isInformed = false;
+			        isUsingSiteFidelity = false;
 	        selectedTarget = true;
 	    }
 
@@ -556,11 +581,12 @@ void CPFA_controller::Returning() {
           selectedTarget = true;
       }
 
-      if(!selectedTarget) {
-          if(LoopFunctions->UseAHCFA == 1) {
-              SetAdaptiveSearchLocation();
-          }
-          else {
+	      if(!selectedTarget) {
+	          Real r4 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
+	          if(LoopFunctions->UseAHCFA == 1 && r4 < adaptiveProbability) {
+	              SetAdaptiveSearchLocation();
+	          }
+	          else {
               SetRandomSearchLocation();
           }
           isInformed = false;
@@ -600,15 +626,67 @@ void CPFA_controller::Returning() {
     }		
 }
 
-void CPFA_controller::SetAdaptiveSearchLocation() {
-    argos::CVector2 adaptiveTarget;
-    if(LoopFunctions != NULL && LoopFunctions->SelectAdaptiveSearchTarget(adaptiveTarget)) {
-        SetIsHeadingToNest(true);
-        SetTarget(adaptiveTarget);
-        return;
+	void CPFA_controller::SetAdaptiveSearchLocation() {
+	    argos::CVector2 adaptiveTarget;
+	    if(LoopFunctions != NULL && LoopFunctions->SelectAdaptiveSearchTarget(adaptiveTarget)) {
+	        bool useSweep = LoopFunctions->getSimTimeInSeconds() >= 480.0 &&
+	                        !LoopFunctions->IsClusteredResourceMode();
+	        if(useSweep) {
+	            AddAdaptiveSweepTargets(adaptiveTarget);
+	        }
+	        else {
+	            AdaptiveSweepTargets.clear();
+	            AdaptiveSweepIndex = 0;
+	            IsUsingAdaptiveSweep = false;
+	        }
+	        SetIsHeadingToNest(true);
+	        SetTarget(adaptiveTarget);
+	        return;
     }
-    SetRandomSearchLocation();
-}
+	    SetRandomSearchLocation();
+	}
+
+	void CPFA_controller::AddAdaptiveSweepTargets(const argos::CVector2& center) {
+	    AdaptiveSweepTargets.clear();
+	    AdaptiveSweepIndex = 0;
+	    IsUsingAdaptiveSweep = true;
+
+	    Real step = 0.50;
+	    std::vector<argos::CVector2> offsets;
+	    offsets.push_back(argos::CVector2(0.0, 0.0));
+	    offsets.push_back(argos::CVector2(step, 0.0));
+	    offsets.push_back(argos::CVector2(step, step));
+	    offsets.push_back(argos::CVector2(0.0, step));
+	    offsets.push_back(argos::CVector2(-step, step));
+	    offsets.push_back(argos::CVector2(-step, 0.0));
+	    offsets.push_back(argos::CVector2(-step, -step));
+	    offsets.push_back(argos::CVector2(0.0, -step));
+	    offsets.push_back(argos::CVector2(step, -step));
+
+	    for(size_t i = 0; i < offsets.size(); ++i) {
+	        argos::CVector2 point = center + offsets[i];
+	        point.SetX(GetBound(point.GetX(), ForageRangeX.GetMin(), ForageRangeX.GetMax()));
+	        point.SetY(GetBound(point.GetY(), ForageRangeY.GetMin(), ForageRangeY.GetMax()));
+	        AdaptiveSweepTargets.push_back(point);
+	    }
+	    AdaptiveSweepIndex = 1;
+	}
+
+	bool CPFA_controller::ContinueAdaptiveSweep() {
+	    if(!IsUsingAdaptiveSweep) return false;
+
+	    if(AdaptiveSweepIndex >= AdaptiveSweepTargets.size()) {
+	        AdaptiveSweepTargets.clear();
+	        AdaptiveSweepIndex = 0;
+	        IsUsingAdaptiveSweep = false;
+	        return false;
+	    }
+
+	    SetIsHeadingToNest(false);
+	    SetTarget(AdaptiveSweepTargets[AdaptiveSweepIndex]);
+	    AdaptiveSweepIndex++;
+	    return true;
+	}
 
 void CPFA_controller::SampleVisitedLocation() {
     if(LoopFunctions == NULL) return;

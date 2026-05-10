@@ -55,11 +55,14 @@ CPFA_loop_functions::CPFA_loop_functions() :
 	AdaptiveClusterHitThreshold(3),
 	AdaptiveClaimWindowTicks(0),
 	AdaptiveTopCandidates(10),
-	AdaptiveExploreWeight(1.00),
-	AdaptivePheromoneWeight(0.60),
-	AdaptiveResourceWeight(1.25),
-	AdaptiveClusterProtectWeight(0.35),
-	AdaptiveRandomWeight(0.15)
+		AdaptiveExploreWeight(0.80),
+		AdaptivePheromoneWeight(1.10),
+		AdaptiveResourceWeight(2.00),
+		AdaptiveClusterProtectWeight(1.00),
+		AdaptiveRandomWeight(0.10),
+		HeatmapGridSize(12),
+		HeatmapSamplePeriodTicks(0),
+		LastHeatmapSampleTick(0)
 {}
 
 void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {	
@@ -90,6 +93,7 @@ void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {
 	argos::GetNodeAttribute(settings_node, "DrawTrails", DrawTrails);
 	argos::GetNodeAttribute(settings_node, "DrawTargetRays", DrawTargetRays);
 	argos::GetNodeAttributeOrDefault(settings_node, "UseAHCFA", UseAHCFA, UseAHCFA);
+	argos::GetNodeAttributeOrDefault(settings_node, "HeatmapGridSize", HeatmapGridSize, HeatmapGridSize);
 	argos::GetNodeAttribute(settings_node, "FoodDistribution", FoodDistribution);
 	argos::GetNodeAttribute(settings_node, "FoodItemCount", FoodItemCount);
 	argos::GetNodeAttribute(settings_node, "PowerlawFoodUnitCount", PowerlawFoodUnitCount);
@@ -120,15 +124,9 @@ void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {
 
         ArenaWidth = ArenaSize[0];
         
-        if(abs(NestPosition.GetX()) < -1) //quad arena
-        {
-            NestRadius *= sqrt(1 + log(ArenaWidth)/log(2));
-        }
-        else
-        {
-            NestRadius *= sqrt(log(ArenaWidth)/log(2));
-        }
-        argos::LOG<<"NestRadius="<<NestRadius<<endl;
+	        // Keep the assignment nest radius exactly as configured in XML.
+	        // For the final project this is 0.25 m.
+	        argos::LOG<<"NestRadius="<<NestRadius<<endl;
 	   // Send a pointer to this loop functions object to each controller.
 	   argos::CSpace::TMapPerType& footbots = GetSpace().GetEntitiesByType("foot-bot");
 	   argos::CSpace::TMapPerType::iterator it;
@@ -148,7 +146,9 @@ void CPFA_loop_functions::Init(argos::TConfigurationNode &node) {
     SetFoodDistribution();
     AdaptiveClusterWindowTicks = 90 * GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick();
     AdaptiveClaimWindowTicks = 45 * GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick();
+    HeatmapSamplePeriodTicks = GetSimulator().GetPhysicsEngine("dyn2d").GetInverseSimulationClockTick();
     ResetAdaptiveRegions();
+    ResetVisitHeatmap();
   
  ForageList.clear(); 
  last_time_in_minutes=0;
@@ -180,6 +180,7 @@ void CPFA_loop_functions::Reset() {
 	FidelityList.clear();
     TargetRayList.clear();
     ResetAdaptiveRegions();
+    ResetVisitHeatmap();
     
     SetFoodDistribution();
     
@@ -207,6 +208,7 @@ void CPFA_loop_functions::PreStep() {
 
 
 	   UpdatePheromoneList();
+	   SampleVisitHeatmap();
 
 	   if(GetSpace().GetSimulationClock() > ResourceDensityDelay) {
         for(size_t i = 0; i < FoodColoringList.size(); i++) {
@@ -257,6 +259,8 @@ void CPFA_loop_functions::PostExperiment() {
 	  
      printf("%f, %f, %lu\n", score, getSimTimeInSeconds(), RandomSeed);
      ExportCollectionMilestones();
+     ExportVisitHeatmap();
+     ExportAdaptiveRegionMap();
        
                   
     if (PrintFinalScore == 1) {
@@ -701,6 +705,147 @@ void CPFA_loop_functions::ExportCollectionMilestones() {
            << phase90To100 << "\n";
 }
 
+void CPFA_loop_functions::ResetVisitHeatmap() {
+    size_t cellCount = HeatmapGridSize * HeatmapGridSize;
+    HeatmapVisitCounts.assign(cellCount, 0);
+    LastHeatmapSampleTick = 0;
+}
+
+void CPFA_loop_functions::SampleVisitHeatmap() {
+    if(HeatmapGridSize == 0) return;
+    if(HeatmapVisitCounts.size() != HeatmapGridSize * HeatmapGridSize) {
+        ResetVisitHeatmap();
+    }
+
+    size_t now = GetSpace().GetSimulationClock();
+    if(now == 0 || (LastHeatmapSampleTick != 0 && now - LastHeatmapSampleTick < HeatmapSamplePeriodTicks)) {
+        return;
+    }
+
+    argos::CSpace::TMapPerType& footbots = GetSpace().GetEntitiesByType("foot-bot");
+    for(argos::CSpace::TMapPerType::iterator it = footbots.begin(); it != footbots.end(); ++it) {
+        argos::CFootBotEntity& footBot = *argos::any_cast<argos::CFootBotEntity*>(it->second);
+        const CVector3& position = footBot.GetEmbodiedEntity().GetOriginAnchor().Position;
+        RecordVisitHeatmapCell(CVector2(position.GetX(), position.GetY()));
+    }
+
+    LastHeatmapSampleTick = now;
+}
+
+void CPFA_loop_functions::RecordVisitHeatmapCell(const argos::CVector2& c_point) {
+    Real minX = ForageRangeX.GetMin();
+    Real maxX = ForageRangeX.GetMax();
+    Real minY = ForageRangeY.GetMin();
+    Real maxY = ForageRangeY.GetMax();
+
+    if(c_point.GetX() < minX || c_point.GetX() > maxX ||
+       c_point.GetY() < minY || c_point.GetY() > maxY) {
+        return;
+    }
+
+    Real xRatio = (c_point.GetX() - minX) / (maxX - minX);
+    Real yRatio = (c_point.GetY() - minY) / (maxY - minY);
+    size_t col = std::min(HeatmapGridSize - 1, (size_t)std::floor(xRatio * HeatmapGridSize));
+    size_t rowFromBottom = std::min(HeatmapGridSize - 1, (size_t)std::floor(yRatio * HeatmapGridSize));
+    size_t row = HeatmapGridSize - 1 - rowFromBottom;
+
+    HeatmapVisitCounts[row * HeatmapGridSize + col]++;
+}
+
+void CPFA_loop_functions::ExportVisitHeatmap() {
+    if(HeatmapGridSize == 0 || HeatmapVisitCounts.empty()) return;
+
+    string distribution = "Powerlaw";
+    if(FoodDistribution == 0) distribution = "Random";
+    else if(FoodDistribution == 1) distribution = "Clustered";
+
+    string algorithm = UseAHCFA == 1 ? "AHCFA" : "CPFA";
+    string path = "results/final_project/visit_heatmap_cells.csv";
+    bool writeHeader = false;
+    {
+        ifstream existing(path.c_str());
+        writeHeader = !existing.good() || existing.peek() == ifstream::traits_type::eof();
+    }
+
+    ofstream output(path.c_str(), ios::app);
+    if(!output.is_open()) return;
+
+    if(writeHeader) {
+        output << "algorithm,distribution,seed,grid_size,row,col,x_min,x_max,y_min,y_max,visits\n";
+    }
+
+    Real xMin = ForageRangeX.GetMin();
+    Real xMax = ForageRangeX.GetMax();
+    Real yMin = ForageRangeY.GetMin();
+    Real yMax = ForageRangeY.GetMax();
+    Real cellWidth = (xMax - xMin) / (Real)HeatmapGridSize;
+    Real cellHeight = (yMax - yMin) / (Real)HeatmapGridSize;
+
+    for(size_t row = 0; row < HeatmapGridSize; ++row) {
+        for(size_t col = 0; col < HeatmapGridSize; ++col) {
+            Real cellXMin = xMin + cellWidth * (Real)col;
+            Real cellXMax = cellXMin + cellWidth;
+            size_t rowFromBottom = HeatmapGridSize - 1 - row;
+            Real cellYMin = yMin + cellHeight * (Real)rowFromBottom;
+            Real cellYMax = cellYMin + cellHeight;
+            output << algorithm << ","
+                   << distribution << ","
+                   << RandomSeed << ","
+                   << HeatmapGridSize << ","
+                   << row << ","
+                   << col << ","
+                   << cellXMin << ","
+                   << cellXMax << ","
+                   << cellYMin << ","
+                   << cellYMax << ","
+                   << HeatmapVisitCounts[row * HeatmapGridSize + col] << "\n";
+        }
+    }
+}
+
+void CPFA_loop_functions::ExportAdaptiveRegionMap() {
+    if(AdaptiveRegions.empty()) return;
+
+    string distribution = "Powerlaw";
+    if(FoodDistribution == 0) distribution = "Random";
+    else if(FoodDistribution == 1) distribution = "Clustered";
+
+    string algorithm = UseAHCFA == 1 ? "AHCFA" : "CPFA";
+    string path = "results/final_project/adaptive_quadtree_regions.csv";
+    bool writeHeader = false;
+    {
+        ifstream existing(path.c_str());
+        writeHeader = !existing.good() || existing.peek() == ifstream::traits_type::eof();
+    }
+
+    ofstream output(path.c_str(), ios::app);
+    if(!output.is_open()) return;
+
+    if(writeHeader) {
+        output << "algorithm,distribution,seed,region_id,min_x,max_x,min_y,max_y,"
+               << "visits,resource_hits,resource_weight,score,is_leaf\n";
+    }
+
+    for(size_t i = 0; i < AdaptiveRegions.size(); ++i) {
+        const AdaptiveRegion& region = AdaptiveRegions[i];
+        if(!region.IsLeaf()) continue;
+
+        output << algorithm << ","
+               << distribution << ","
+               << RandomSeed << ","
+               << i << ","
+               << region.MinX << ","
+               << region.MaxX << ","
+               << region.MinY << ","
+               << region.MaxY << ","
+               << region.Visits << ","
+               << region.ResourceHits << ","
+               << region.ResourceWeight << ","
+               << ScoreAdaptiveRegion(region) << ","
+               << 1 << "\n";
+    }
+}
+
 double CPFA_loop_functions::Score() {	
 	return score;
 }
@@ -845,17 +990,25 @@ Real CPFA_loop_functions::ScoreAdaptiveRegion(const AdaptiveRegion& s_region) {
         fidelityScore += 1.0 / (1.0 + d2);
     }
 
-    Real resourceProbability = s_region.ResourceWeight / (1.0 + (Real)s_region.Visits);
-    Real exploration = AdaptiveExploreWeight / (1.0 + (Real)s_region.Visits);
+	    Real minutes = getSimTimeInSeconds() / 60.0;
+	    Real phaseExploreMultiplier = 0.10;
+	    if(minutes >= 8.0) phaseExploreMultiplier = 0.90;
+	    else if(minutes >= 4.0) phaseExploreMultiplier = 0.35;
+
+	    bool clusteredMode = IsClusteredResourceMode();
+	    Real clusteredMultiplier = clusteredMode ? 0.35 : 1.0;
+	    Real resourceProbability = s_region.ResourceWeight / std::sqrt(1.0 + (Real)s_region.Visits);
+	    Real exploration = (AdaptiveExploreWeight * phaseExploreMultiplier * clusteredMultiplier) /
+	                       (1.0 + (Real)s_region.Visits);
     Real regionWidth = std::max<Real>(0.001, s_region.MaxX - s_region.MinX);
     Real regionHeight = std::max<Real>(0.001, s_region.MaxY - s_region.MinY);
     Real precisionBonus = 0.05 / std::sqrt(regionWidth * regionHeight);
 
     return exploration +
-           AdaptivePheromoneWeight * pheromoneScore +
-           AdaptiveResourceWeight * resourceProbability +
-           AdaptiveClusterProtectWeight * fidelityScore +
-           precisionBonus;
+	           (AdaptivePheromoneWeight * (clusteredMode ? 1.35 : 1.0)) * pheromoneScore +
+	           AdaptiveResourceWeight * resourceProbability +
+	           (AdaptiveClusterProtectWeight * (clusteredMode ? 1.50 : 1.0)) * fidelityScore +
+	           precisionBonus;
 }
 
 size_t CPFA_loop_functions::CountAdaptiveTargetClaims(size_t un_region) const {

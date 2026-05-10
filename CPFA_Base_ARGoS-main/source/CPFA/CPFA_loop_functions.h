@@ -33,6 +33,8 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		void PostExperiment();
 		void RecordCollectionMilestones();
 		void ExportCollectionMilestones();
+		void ExportVisitHeatmap();
+		void ExportAdaptiveRegionMap();
 		argos::CColor GetFloorColor(const argos::CVector2 &c_pos_on_floor);
 
 		// GA Functions
@@ -175,6 +177,10 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 			argos::Real AdaptiveResourceWeight;
 			argos::Real AdaptiveClusterProtectWeight;
 			argos::Real AdaptiveRandomWeight;
+			size_t HeatmapGridSize;
+			size_t HeatmapSamplePeriodTicks;
+			size_t LastHeatmapSampleTick;
+			std::vector<size_t> HeatmapVisitCounts;
 
 	private:
 
@@ -191,6 +197,9 @@ class CPFA_loop_functions : public argos::CLoopFunctions
 		size_t CountAdaptiveTargetClaims(size_t un_region) const;
 		size_t CountAdaptiveNeighborClaims(size_t un_region) const;
 		argos::CVector2 SampleAdaptiveRegion(const AdaptiveRegion& s_region);
+		void ResetVisitHeatmap();
+		void SampleVisitHeatmap();
+		void RecordVisitHeatmapCell(const argos::CVector2& c_point);
                 bool IsOutOfBounds(argos::CVector2 p, size_t length, size_t width);
 		bool IsCollidingWithNest(argos::CVector2 p);
 		bool IsCollidingWithFood(argos::CVector2 p);

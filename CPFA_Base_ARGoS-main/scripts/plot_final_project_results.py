@@ -352,12 +352,16 @@ def summarize(data):
         paired_losses = (merged["score_ahcfa"] < merged["score_cpfa"]).sum()
         paired_mean_delta = (merged["score_ahcfa"] - merged["score_cpfa"]).mean()
         paired_median_delta = (merged["score_ahcfa"] - merged["score_cpfa"]).median()
-        wilcoxon_p = stats.wilcoxon(
-            merged["score_ahcfa"],
-            merged["score_cpfa"],
-            zero_method="wilcox",
-            alternative="two-sided",
-        ).pvalue
+        deltas = merged["score_ahcfa"] - merged["score_cpfa"]
+        if (deltas == 0).all():
+            wilcoxon_p = np.nan
+        else:
+            wilcoxon_p = stats.wilcoxon(
+                merged["score_ahcfa"],
+                merged["score_cpfa"],
+                zero_method="zsplit",
+                alternative="two-sided",
+            ).pvalue
 
         rows.append(
             {

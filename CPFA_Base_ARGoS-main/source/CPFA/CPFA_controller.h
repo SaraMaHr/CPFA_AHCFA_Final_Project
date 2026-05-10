@@ -87,10 +87,12 @@ class CPFA_controller : public BaseController {
 		void Surveying();
 
 		/* CPFA helper functions */
-		void SetRandomSearchLocation();
-		void SetAdaptiveSearchLocation();
-		void SampleVisitedLocation();
-		void UploadVisitedLocations();
+			void SetRandomSearchLocation();
+			void SetAdaptiveSearchLocation();
+			void AddAdaptiveSweepTargets(const argos::CVector2& center);
+			bool ContinueAdaptiveSweep();
+			void SampleVisitedLocation();
+			void UploadVisitedLocations();
 		void SetHoldingFood();
 		void SetLocalResourceDensity();
 		void SetFidelityList(argos::CVector2 newFidelity);
@@ -109,12 +111,15 @@ class CPFA_controller : public BaseController {
 		string results_full_path;
 		bool isUsingPheromone;
 
-		std::deque<argos::CVector2> VisitedLocationQueue;
-		size_t LastVisitSampleTick;
-		size_t VisitSamplePeriodTicks;
-		size_t MaxVisitedLocations;
+			std::deque<argos::CVector2> VisitedLocationQueue;
+			size_t LastVisitSampleTick;
+			size_t VisitSamplePeriodTicks;
+			size_t MaxVisitedLocations;
+			std::vector<argos::CVector2> AdaptiveSweepTargets;
+			size_t AdaptiveSweepIndex;
+			bool IsUsingAdaptiveSweep;
 
-		unsigned int survey_count;
+			unsigned int survey_count;
 		/* Pointer to the LEDs actuator */
         CCI_LEDsActuator* m_pcLEDs;
 };

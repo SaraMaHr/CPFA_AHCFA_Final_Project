@@ -8,6 +8,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/CPFA_loop_functions.dir/CPFA_loop_functions_autogen/mocs_compilation.cpp.o.d"
   "CMakeFiles/CPFA_loop_functions.dir/CPFA_qt_user_functions.cpp.o"
   "CMakeFiles/CPFA_loop_functions.dir/CPFA_qt_user_functions.cpp.o.d"
+  "CPFA_loop_functions_autogen/mocs_compilation.cpp"
+  "CPFA_loop_functions_autogen/timestamp"
   "libCPFA_loop_functions.pdb"
   "libCPFA_loop_functions.so"
 )

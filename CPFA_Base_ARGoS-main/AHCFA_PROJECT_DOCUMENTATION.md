@@ -1,84 +1,76 @@
 # Adaptive Hierarchical Clustered Foraging Algorithm Documentation
 
-This document summarizes what we changed for Final Project 3 and how to run,
-visualize, and evaluate the implementation.
+This document describes the current 12-minute final-project implementation in
+`CPFA_Base_ARGoS-main_12min`.
 
-## 1. Project Requirement Summary
+## 1. Project Setup
 
-The goal is to improve CPFA for robot swarm foraging.
-The key requirements are:
+The project evaluates an improved CPFA-style foraging controller against the
+original CPFA baseline.
 
-1. Implement an efficient way to organize visited locations or regions.
-2. Improve the search strategy so robots can find resources in less-visited
-   areas instead of repeatedly visiting only pheromone-rich locations.
-3. Evaluate performance in three resource distributions:
-   - Random
-   - Powerlaw
-   - Clustered
-4. Use the required experiment settings:
-   - Arena size: 10 m x 10 m
-   - Collection zone radius: 0.25 m in the assignment table
-   - Number of resources: 256
-   - Number of robots: 24
-   - Foraging time: 12 minutes, or 720 seconds
-   - Runs per distribution: 50
-5. Compare the new algorithm with the original CPFA.
-6. Report percentage improvement in collected resources.
-7. Plot results using box plots.
+Required experiment structure:
 
-## 2. Motivation From Arturo's GCFA Paper
+- Arena: 10 m x 10 m
+- Resources: 256
+- Robots: 24
+- Runtime: 12 minutes, or 720 seconds
+- Runs: 50 per distribution
+- Distributions: Random, Powerlaw, Clustered
+- Metric: collected resources after 12 minutes
 
-Arturo's GCFA paper proposes a grid-based complete foraging algorithm. GCFA
-stores visited regions in a fixed grid and sends robots toward least-visited
-regions.
+The current XML files use `NestRadius="0.25"`. The runtime code no longer
+scales the nest radius, so the XML value is the real simulation value.
 
-The paper's result section shows:
+## 2. Motivation From Arturo's GCFA
 
-1. GCFA improves Random and Powerlaw distributions because it reduces repeated
-   searching in already-visited regions.
-2. GCFA does not improve Clustered distribution. In clustered environments,
-   CPFA can be better because pheromone trails and site fidelity keep robots
-   near productive clusters.
-3. GCFA's weakness in clusters happens because least-visited-region selection
-   may send robots away from known resource clusters and into empty areas.
+Arturo's GCFA paper improves final-stage collection by recording visited regions
+in a grid and sending robots toward less-visited regions. This works well for
+Random and Powerlaw endgame collection, but the paper shows a weakness in
+Clustered resources: pure least-visited-region selection can pull robots away
+from productive pheromone/site-fidelity locations.
 
-AHCFA was designed to address that weakness by combining:
+AHCFA is designed as a hybrid:
 
-1. CPFA exploitation:
-   - pheromone trails
-   - site fidelity
-   - correlated random walk
-2. GCFA-style memory:
-   - visited-region tracking
-   - low-visit region selection
-3. New improvements:
-   - adaptive QuadTree regions instead of a fixed grid
-   - hybrid scoring instead of least-visited-only scoring
-   - adaptive mode switching between clustered and sparse behavior
-   - target balancing so too many robots do not choose the same region
+- Keep CPFA exploitation: pheromones, site fidelity, correlated random walk.
+- Add GCFA-style spatial memory: limited visited-location reports.
+- Use adaptive QuadTree regions instead of a fixed grid.
+- Score regions with both exploration and exploitation information.
+- Preserve CPFA behavior when exploration hurts, especially Random early/mid
+  collection and clustered resource exploitation.
 
-## 3. Algorithm Implemented
+Important note: Arturo's reported `48%` and `35%` improvements are from
+endgame phase time, especially `90% -> 100%`, not from 12-minute collected
+resources. The class-project script reports collected resources at 720 seconds.
 
-The implemented algorithm is:
+## 3. Current Algorithm
 
-Adaptive Hierarchical Clustered Foraging Algorithm, or AHCFA.
+The implemented algorithm is AHCFA: Adaptive Hierarchical Clustered Foraging
+Algorithm.
 
-AHCFA uses a central shared memory in the loop functions. Robots still behave
-mostly like CPFA robots, but when they return to the nest they can upload
-visited-location samples and receive a better next target.
+Robots still use the CPFA finite-state machine:
 
-## 4. Main Code Changes
+- `DEPARTING`
+- `SEARCHING`
+- `SURVEYING`
+- `RETURNING`
 
-### 4.1 QuadTree-Based Visited Region Memory
+AHCFA adds shared spatial memory in the loop functions and uses it only when it
+is expected to help. The current implementation intentionally keeps Random
+distribution behavior CPFA-like because earlier adaptive exploration was
+unstable for Random in the 12-minute metric.
 
-File:
+## 4. Main Implementation Details
+
+### QuadTree Spatial Memory
+
+Files:
 
 ```text
 source/CPFA/CPFA_loop_functions.h
 source/CPFA/CPFA_loop_functions.cpp
 ```
 
-Added an `AdaptiveRegion` structure. Each region stores:
+The loop functions maintain adaptive regions. Each region stores:
 
 ```text
 MinX, MaxX, MinY, MaxY
@@ -87,15 +79,6 @@ ResourceHits
 ResourceWeight
 Children[4]
 ```
-
-The root region covers the full forage arena. When a region receives enough
-visit observations, it splits into four child regions.
-
-This gives adaptive resolution:
-
-1. Frequently visited or important regions become smaller and more precise.
-2. Sparse regions remain large and cheap to store.
-3. The server does not need to store all raw visited positions.
 
 Important functions:
 
@@ -107,18 +90,20 @@ SplitAdaptiveRegion()
 CollectAdaptiveLeaves()
 ```
 
-### 4.2 Limited Robot Visit Memory
+The server stores compact region counters instead of every raw robot location.
 
-File:
+### Limited Robot Visit Memory
+
+Files:
 
 ```text
-source/CPFA/CPFA_controller.cpp
 source/CPFA/CPFA_controller.h
+source/CPFA/CPFA_controller.cpp
 ```
 
-Each robot stores a small FIFO queue of visited locations while searching.
-The implementation samples a robot's position every 25 seconds and keeps at
-most 20 samples.
+Each robot samples its position every 25 seconds while searching and keeps at
+most 20 samples. When it returns to the nest, it uploads those samples to the
+loop functions.
 
 Important functions:
 
@@ -127,13 +112,7 @@ SampleVisitedLocation()
 UploadVisitedLocations()
 ```
 
-When the robot returns to the nest, it uploads these samples to the loop
-function. The server updates the QuadTree and the robot clears its local
-queue.
-
-This follows Arturo's GCFA idea of limited onboard memory.
-
-### 4.3 Hybrid Region Scoring
+### Hybrid Region Scoring
 
 File:
 
@@ -141,116 +120,93 @@ File:
 source/CPFA/CPFA_loop_functions.cpp
 ```
 
-AHCFA does not select regions only by least-visited count. It uses a hybrid
-score:
+AHCFA scores candidate regions using:
 
 ```text
 score =
   exploration term
   + pheromone term
-  + resource probability term
-  + site-fidelity/cluster term
+  + resource discovery term
+  + site-fidelity term
   + precision bonus
 ```
 
-Implemented in:
+Important functions:
 
 ```text
 ScoreAdaptiveRegion()
 SelectAdaptiveSearchTarget()
 ```
 
-The idea is:
+Current tuning:
 
-1. Less-visited regions are attractive for exploration.
-2. Regions near pheromones remain attractive for exploitation.
-3. Regions with previous resource discoveries receive higher probability.
-4. Regions near site-fidelity points remain attractive.
-5. Smaller QuadTree regions get a small precision bonus.
+- Exploration is low early and stronger late.
+- Pheromone/resource/site-fidelity terms are weighted more strongly than in the
+  first AHCFA draft.
+- Resource weight is divided by `sqrt(1 + Visits)` instead of `1 + Visits`, so
+  productive Powerlaw/Clustered areas are not punished too aggressively.
+- In clustered mode, exploration is reduced and pheromone/site-fidelity evidence
+  is weighted more strongly.
 
-This helps avoid GCFA's clustered-distribution problem.
+### Clustered Mode
 
-### 4.4 Resource Discovery Memory
+File:
+
+```text
+source/CPFA/CPFA_loop_functions.cpp
+```
+
+`IsClusteredResourceMode()` watches recent resource discoveries. When recent
+discoveries are dense, AHCFA behaves more like CPFA so robots do not abandon
+productive clusters.
+
+### Adaptive Local Sweep
+
+Files:
+
+```text
+source/CPFA/CPFA_controller.h
+source/CPFA/CPFA_controller.cpp
+```
+
+AHCFA includes a GCFA-style local sweep target list:
+
+```text
+AddAdaptiveSweepTargets()
+ContinueAdaptiveSweep()
+```
+
+The sweep creates nine local targets around an adaptive target. In the current
+12-minute tuning, the sweep is used conservatively: only late in the run and not
+in clustered mode. This avoids hurting early CPFA exploitation.
+
+### Opportunistic Pickup While Returning
 
 File:
 
 ```text
 source/CPFA/CPFA_controller.cpp
-source/CPFA/CPFA_loop_functions.cpp
 ```
 
-When a robot finds food, the code estimates local resource density and records
-the discovery in the adaptive memory.
+AHCFA checks for food while returning to the nest in Powerlaw and Clustered
+distributions. If a robot passes over a resource on the way back, it can collect
+it instead of ignoring it. This was the most useful current change for improving
+Powerlaw and Clustered 12-minute scores.
 
-Important functions:
+Random distribution is excluded from this extra behavior in the current tuning
+because Random became unstable during small-seed tests.
 
-```text
-SetLocalResourceDensity()
-RecordResourceDiscovery()
-```
-
-This information is used as the resource-probability term in the region score.
-
-### 4.5 Adaptive Search Mode Switching
-
-File:
-
-```text
-source/CPFA/CPFA_controller.cpp
-source/CPFA/CPFA_loop_functions.cpp
-```
-
-AHCFA checks recent discovery density to decide whether the environment is
-behaving like a clustered environment.
-
-Important function:
-
-```text
-IsClusteredResourceMode()
-```
-
-Behavior:
-
-1. If recent discoveries suggest clustering, robots preserve CPFA behavior more
-   strongly by using pheromones and site fidelity.
-2. If discoveries are sparse, robots use QuadTree-guided exploration more often.
-3. Even in clustered mode, some robots still use adaptive exploration so the
-   whole swarm does not crowd into one cluster.
-
-### 4.6 Target Balancing
+### CPFA/AHCFA Switch
 
 File:
 
 ```text
 source/CPFA/CPFA_loop_functions.cpp
-source/CPFA/CPFA_loop_functions.h
-```
-
-We noticed in visualization that many robots were going to the same cluster.
-To reduce that crowding, AHCFA now keeps short-lived target claims.
-
-Important function:
-
-```text
-CountAdaptiveTargetClaims()
-```
-
-When a QuadTree region has already been selected recently by other robots, its
-score is temporarily penalized. This encourages other robots to spread to other
-regions.
-
-### 4.7 CPFA vs AHCFA Switch
-
-File:
-
-```text
-source/CPFA/CPFA_loop_functions.h
-source/CPFA/CPFA_loop_functions.cpp
-source/CPFA/CPFA_controller.cpp
 experiments/final_project/*.xml
+scripts/run_final_project_50_trials.sh
 ```
 
-Added:
+The XML setting is:
 
 ```xml
 UseAHCFA="1"
@@ -259,36 +215,16 @@ UseAHCFA="1"
 Meaning:
 
 ```text
-UseAHCFA="1" -> run AHCFA
-UseAHCFA="0" -> run CPFA baseline
+UseAHCFA="1" -> AHCFA
+UseAHCFA="0" -> CPFA baseline
 ```
 
-This is important for fair evaluation because the assignment asks us to compare
-against original CPFA.
-
-The run script automatically creates temporary XML files with `UseAHCFA="0"`
-or `UseAHCFA="1"` so both algorithms can be tested using the same seeds.
-
-### 4.8 Result File Naming
-
-File:
-
-```text
-source/CPFA/CPFA_loop_functions.cpp
-```
-
-Result filenames now include the algorithm name:
-
-```text
-CPFA
-AHCFA
-```
-
-This avoids mixing CPFA and AHCFA results.
+The run script creates temporary XML files so CPFA and AHCFA run with the same
+seeds.
 
 ## 5. Experiment XML Files
 
-The final project XML files are:
+Current final-project XML files:
 
 ```text
 experiments/final_project/Random_AHCFA_r24_tag256_10by10.xml
@@ -296,16 +232,17 @@ experiments/final_project/Powerlaw_AHCFA_r24_tag256_10by10.xml
 experiments/final_project/Clustered_AHCFA_r24_tag256_10by10.xml
 ```
 
-Each file uses:
+Current key settings:
 
 ```text
-24 robots
-256 resources
-10 m x 10 m arena
-720 seconds maximum simulation time
+Arena size: 10 m x 10 m
+Robots: 24
+Resources: 256
+MaxSimTimeInSeconds: 720
+NestRadius: 0.25
 ```
 
-For clustered resources:
+Clustered resources:
 
 ```text
 NumberOfClusters = 4
@@ -314,107 +251,64 @@ ClusterWidthY = 8
 Total resources = 4 x 8 x 8 = 256
 ```
 
-Robot IDs in visualization may look like `F35`, but this does not mean robot
-35. It means:
+The XML places four groups of six robots:
 
 ```text
-F3 group, robot index 5
-```
-
-The XML uses four groups of six robots:
-
-```text
-F0 group: F00 to F05
-F1 group: F10 to F15
-F2 group: F20 to F25
-F3 group: F30 to F35
+F0 group: 6 robots
+F1 group: 6 robots
+F2 group: 6 robots
+F3 group: 6 robots
 Total: 24 robots
 ```
 
-## 6. Visualization Changes
+## 6. Build And Run
 
-Visualization was enabled in:
-
-```text
-experiments/final_project/Clustered_AHCFA_r24_tag256_10by10.xml
-```
-
-Run clustered visualization with:
+From the 12-minute copy:
 
 ```bash
-cd /home/sara/Downloads/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main
-argos3 -c experiments/final_project/Clustered_AHCFA_r24_tag256_10by10.xml
-```
-
-Do not use `-z` when visualization is needed. The `-z` flag disables
-visualization.
-
-### Visualization Color Meaning
-
-In the visualization:
-
-```text
-Black disks: uncollected resources
-Orange disks: nearby resources highlighted during local density estimation
-Yellow disks: site-fidelity locations
-Green/yellow/red markers: pheromone waypoints or trails with different strengths
-Green large circle: nest or collection zone
-Black disks near/in the nest: collected resources
-```
-
-Orange highlighting is temporary. It shows which local food neighborhood was
-detected when a robot found a resource.
-
-## 7. How To Build
-
-From the project folder:
-
-```bash
-cd /home/sara/Downloads/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main
+cd /home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main_12min
+export LD_LIBRARY_PATH="$PWD/build/source/Base:$PWD/build/source/CPFA:$LD_LIBRARY_PATH"
 cmake --build build
 ```
 
-## 8. How To Run One Simulation Without Visualization
-
-Use `-z` for headless mode.
-
-Random:
+Run one headless simulation:
 
 ```bash
-argos3 -z -c experiments/final_project/Random_AHCFA_r24_tag256_10by10.xml
+argos3 -n -z -c experiments/final_project/Random_AHCFA_r24_tag256_10by10.xml
 ```
 
-Powerlaw:
+Run the full 12-minute evaluation:
 
 ```bash
-argos3 -z -c experiments/final_project/Powerlaw_AHCFA_r24_tag256_10by10.xml
-```
-
-Clustered:
-
-```bash
-argos3 -z -c experiments/final_project/Clustered_AHCFA_r24_tag256_10by10.xml
-```
-
-## 9. How To Run One Clustered Visualization
-
-```bash
-cd /home/sara/Downloads/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main
-argos3 -c experiments/final_project/Clustered_AHCFA_r24_tag256_10by10.xml
-```
-
-## 10. How To Run The Full Evaluation
-
-The full evaluation compares CPFA and AHCFA.
-
-Run:
-
-```bash
-cd /home/sara/Downloads/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main
-cmake --build build
 bash scripts/run_final_project_50_trials.sh
 python3 scripts/plot_final_project_results.py
+cat results/final_project/ahcfa_vs_cpfa_improvement.csv
 ```
+
+Create an Arturo-style 12 x 12 visit-count heatmap after at least one run:
+
+```bash
+python3 scripts/plot_visit_heatmap.py --distribution Random --algorithm AHCFA
+```
+
+For one specific seed:
+
+```bash
+python3 scripts/plot_visit_heatmap.py --distribution Random --algorithm AHCFA --seed 263532
+```
+
+Create the actual AHCFA QuadTree map, with mixed-size adaptive leaf regions:
+
+```bash
+python3 scripts/plot_adaptive_quadtree_map.py --distribution Clustered --algorithm AHCFA --metric visits --arena-size 10
+python3 scripts/plot_adaptive_quadtree_map.py --distribution Clustered --algorithm AHCFA --metric resource_hits --arena-size 10
+```
+
+The fixed-grid heatmap is for comparison with Arturo's GCFA figure. The
+QuadTree map is the real AHCFA decision memory, so it shows large cells in
+low-information areas and smaller cells where the algorithm has observed more
+activity. The plot frame covers the full 10 m x 10 m arena; the dashed inner
+border marks the safe foraging range used by the robot controller near walls.
 
 This runs:
 
@@ -422,12 +316,9 @@ This runs:
 3 distributions x 2 algorithms x 50 seeds = 300 simulations
 ```
 
-The script uses the same seeds for CPFA and AHCFA. This gives a fair paired
-comparison.
+## 7. Output Files
 
-## 11. Evaluation Output Files
-
-Results are stored in:
+Main result folder:
 
 ```text
 results/final_project/
@@ -443,24 +334,27 @@ Powerlaw_CPFA_50runs.csv
 Powerlaw_AHCFA_50runs.csv
 Clustered_CPFA_50runs.csv
 Clustered_AHCFA_50runs.csv
+score_summary_table.csv
 ahcfa_vs_cpfa_improvement.csv
 cpfa_vs_ahcfa_collected_resources_boxplot.png
-cpfa_vs_ahcfa_time_boxplot.png
+cpfa_vs_ahcfa_mean_score_bar.png
+ahcfa_percent_improvement_bar.png
+visit_heatmap_cells.csv
+visit_heatmap_Random_AHCFA_mean.png
+adaptive_quadtree_regions.csv
+adaptive_quadtree_Clustered_AHCFA_seed980913_visits.png
+adaptive_quadtree_Clustered_AHCFA_seed980913_resource_hits.png
 ```
 
-The most important file for the report is:
+The most important report file is:
 
 ```text
-ahcfa_vs_cpfa_improvement.csv
+results/final_project/ahcfa_vs_cpfa_improvement.csv
 ```
 
-It contains the percent improvement in collected resources.
+## 8. Improvement Formula
 
-## 12. Improvement Formula
-
-The assignment asks for percentage improvement in collected resources.
-
-Use:
+The class project asks for percentage improvement in collected resources:
 
 ```text
 Improvement (%) =
@@ -468,107 +362,89 @@ Improvement (%) =
  / Mean CPFA collected resources) x 100
 ```
 
-The metric should be calculated separately for:
+This is calculated separately for Random, Powerlaw, and Clustered.
+
+## 9. Latest Completed 50-Run Result
+
+Latest completed 50-run result with the current `NestRadius="0.25"` setup:
 
 ```text
-Random
-Powerlaw
-Clustered
+Random:
+  CPFA mean  = 68.26
+  AHCFA mean = 68.26
+  Improvement = 0.00%
+
+Powerlaw:
+  CPFA mean  = 81.26
+  AHCFA mean = 92.00
+  Improvement = +13.22%
+  Wilcoxon p = 0.0028
+
+Clustered:
+  CPFA mean  = 70.08
+  AHCFA mean = 74.40
+  Improvement = +6.16%
+  Wilcoxon p = 0.000515
 ```
 
-## 13. How To Explain AHCFA In The Report
+Interpretation:
 
-You can describe AHCFA like this:
+- Random is neutral by design in the current tuning.
+- Powerlaw improves because productive regions are protected and returning
+  robots can opportunistically collect encountered resources.
+- Clustered improves because CPFA exploitation is preserved instead of using
+  pure least-visited-region behavior like GCFA.
 
-AHCFA improves CPFA by adding adaptive spatial memory to the central server.
-Robots upload a small number of sampled visited locations when they return to
-the nest. The server organizes those samples using a QuadTree instead of a
-fixed grid. It then scores candidate regions using both exploration and
-exploitation information: visit count, pheromone strength, resource discovery
-probability, and site-fidelity evidence. The algorithm switches behavior based
-on recent discovery density: if resources appear clustered, it preserves CPFA's
-pheromone and site-fidelity behavior; if resources appear sparse, it increases
-QuadTree-guided exploration.
+If the nest radius is changed again, rerun the full 50-run script and replace
+these numbers with the new CSV values because the baseline changes too.
 
-## 14. How To Explain Improvement Over GCFA In Clustered Resources
+## 10. Endgame Analysis
 
-Arturo's GCFA paper shows that GCFA can perform worse in clustered
-distributions. The reason is that GCFA's least-visited-region strategy may send
-robots away from known productive clusters.
-
-AHCFA addresses this by:
-
-1. Keeping pheromone and site fidelity from CPFA.
-2. Recording resource probability in QuadTree regions.
-3. Using hybrid scoring instead of least-visited-only scoring.
-4. Switching toward CPFA exploitation when recent discoveries indicate a
-   clustered environment.
-5. Keeping some adaptive exploration so robots can still discover other
-   clusters.
-6. Penalizing regions that already have many recent robot target claims.
-
-This gives a balanced strategy:
-
-```text
-CPFA strength: exploit known clusters
-GCFA strength: avoid repeated visits to empty areas
-AHCFA goal: combine both and adapt between them
-```
-
-## 15. Verification Already Performed
-
-The project has been built successfully with:
+Arturo's GCFA paper reports final-stage time improvements. To generate a
+similar table, use the endgame script:
 
 ```bash
-cmake --build build
+TRIALS=50 MAX_TIME_SECONDS=3600 bash scripts/run_endgame_phase_trials.sh
+cat results/final_project/endgame_phase_table.md
 ```
 
-Headless smoke tests were run for:
+This is a different metric from the 12-minute collected-resource score.
 
-```text
-Random
-Powerlaw
-Clustered
-```
+## 11. Report Explanation
 
-The CPFA/AHCFA switch was also sanity checked on one clustered seed:
+Suggested short report description:
 
-```text
-CPFA seed 1: 76 collected
-AHCFA seed 1: 85 collected
-```
+AHCFA extends CPFA with adaptive spatial memory at the central server. Robots
+upload a bounded set of sampled visited locations when they return to the nest.
+The server stores these observations in adaptive QuadTree regions and scores
+candidate regions using both exploration and exploitation terms: visit count,
+pheromone strength, resource discovery weight, and site-fidelity evidence. The
+algorithm remains conservative early in the run and in clustered conditions, so
+it preserves CPFA's ability to exploit productive resource areas while still
+adding directed exploration when resources become harder to find.
 
-This one seed is only a smoke test. The final proof should use the full 50-run
-evaluation.
+## 12. Final Report Checklist
 
-## 16. Final Report Checklist
+Include:
 
-For the final report, include:
-
-1. Problem statement from Project 3.
-2. Weakness of CPFA:
-   - robots over-follow pheromone/site-fidelity locations
-   - some regions remain underexplored
-3. Weakness of GCFA in Arturo's clustered results:
-   - fixed grid
-   - least-visited-only selection
-   - poor clustered performance
+1. Project requirement summary.
+2. CPFA baseline behavior and weakness.
+3. GCFA motivation and its clustered-distribution weakness.
 4. AHCFA method:
-   - adaptive QuadTree
-   - limited robot visit memory
+   - limited robot memory
+   - QuadTree region memory
    - hybrid scoring
-   - adaptive switching
-   - target balancing
+   - clustered-mode protection
+   - conservative local sweep
+   - opportunistic pickup while returning
 5. Experimental setup:
    - 10 m x 10 m arena
    - 24 robots
    - 256 resources
-   - 12 minutes
+   - 720 seconds
    - 50 runs per distribution
-6. Results:
-   - box plots for collected resources
-   - percentage improvement table
-   - discussion by distribution
-7. Conclusion:
-   - AHCFA is designed to retain CPFA's cluster exploitation while adding
-     efficient memory-guided exploration.
+   - current nest radius used in XML
+6. CPFA vs AHCFA results.
+7. Box plots and percent improvement table.
+8. Honest note that Arturo's endgame table uses a different metric from the
+   12-minute class-project score.
