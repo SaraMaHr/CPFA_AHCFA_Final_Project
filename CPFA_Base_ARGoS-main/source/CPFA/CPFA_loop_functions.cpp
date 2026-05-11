@@ -994,6 +994,9 @@ Real CPFA_loop_functions::ScoreAdaptiveRegion(const AdaptiveRegion& s_region) {
 	    Real phaseExploreMultiplier = 0.10;
 	    if(minutes >= 8.0) phaseExploreMultiplier = 0.90;
 	    else if(minutes >= 4.0) phaseExploreMultiplier = 0.35;
+	    // For Random distribution: boost exploration weight since pheromone/fidelity signals
+	    // are absent, and systematic region coverage is the primary improvement mechanism
+	    if(FoodDistribution == 0) phaseExploreMultiplier *= 2.0;
 
 	    bool clusteredMode = IsClusteredResourceMode();
 	    Real clusteredMultiplier = clusteredMode ? 0.35 : 1.0;

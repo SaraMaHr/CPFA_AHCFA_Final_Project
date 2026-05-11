@@ -49,4 +49,3 @@ tags_collected, collisions_in_seconds, time_in_minutes, random_seed
 74, 808.297, 12, 48
 80, 476.656, 12, 49
 74, 344.516, 12, 50
-71, 323.031, 12, 456106

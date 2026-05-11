@@ -502,7 +502,6 @@ void CPFA_controller::Surveying() {
 void CPFA_controller::Returning() {
 	 //LOG<<"Returning..."<<endl;
 		if(LoopFunctions->UseAHCFA == 1 &&
-		   LoopFunctions->FoodDistribution != 0 &&
 		   !IsHoldingFood() &&
 		   (SimulationTick() % (SimulationTicksPerSecond() / 2)) == 0) {
 		    SetHoldingFood();
@@ -558,7 +557,12 @@ void CPFA_controller::Returning() {
 		    Real adaptiveProbability = 0.0;
 		    if(minutes >= 8.0) adaptiveProbability = 0.25;
 		    else if(minutes >= 4.0) adaptiveProbability = 0.05;
-		    if(LoopFunctions->FoodDistribution == 0) adaptiveProbability = 0.0;
+		    if(LoopFunctions->FoodDistribution == 0) {
+		        // Random: no pheromone/fidelity gradients, so adaptive exploration is safe
+		        if(minutes >= 8.0) adaptiveProbability = 0.40;
+		        else if(minutes >= 4.0) adaptiveProbability = 0.15;
+		        else adaptiveProbability = 0.04;
+		    }
 		    if(clusteredMode) adaptiveProbability = std::min<Real>(adaptiveProbability, 0.05);
 
 			    if(LoopFunctions->UseAHCFA == 1 && !returnedWithFood && r3 < adaptiveProbability) {
@@ -583,7 +587,12 @@ void CPFA_controller::Returning() {
 
 	      if(!selectedTarget) {
 	          Real r4 = RNG->Uniform(argos::CRange<argos::Real>(0.0, 1.0));
-	          if(LoopFunctions->UseAHCFA == 1 && r4 < adaptiveProbability) {
+	          // For Random distribution: when CPFA has no pheromone/fidelity target,
+	          // adaptive exploration is much more valuable than pure random search
+	          Real fallbackProb = (LoopFunctions->FoodDistribution == 0 && !clusteredMode)
+	                              ? std::min<Real>(adaptiveProbability * 2.0, 0.70)
+	                              : adaptiveProbability;
+	          if(LoopFunctions->UseAHCFA == 1 && r4 < fallbackProb) {
 	              SetAdaptiveSearchLocation();
 	          }
 	          else {
@@ -629,7 +638,9 @@ void CPFA_controller::Returning() {
 	void CPFA_controller::SetAdaptiveSearchLocation() {
 	    argos::CVector2 adaptiveTarget;
 	    if(LoopFunctions != NULL && LoopFunctions->SelectAdaptiveSearchTarget(adaptiveTarget)) {
-	        bool useSweep = LoopFunctions->getSimTimeInSeconds() >= 480.0 &&
+	        // For Random: enable sweep earlier (after 5 min) since coverage benefits appear sooner
+	        Real sweepStartSeconds = (LoopFunctions->FoodDistribution == 0) ? 300.0 : 480.0;
+	        bool useSweep = LoopFunctions->getSimTimeInSeconds() >= sweepStartSeconds &&
 	                        !LoopFunctions->IsClusteredResourceMode();
 	        if(useSweep) {
 	            AddAdaptiveSweepTargets(adaptiveTarget);

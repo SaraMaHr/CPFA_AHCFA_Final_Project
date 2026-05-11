@@ -1,4 +1,4 @@
-# Install script for directory: /home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main_12min/source/CPFA
+# Install script for directory: /home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/source/CPFA
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

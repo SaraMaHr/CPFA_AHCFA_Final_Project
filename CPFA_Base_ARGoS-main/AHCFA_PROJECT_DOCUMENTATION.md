@@ -1,7 +1,7 @@
 # Adaptive Hierarchical Clustered Foraging Algorithm Documentation
 
 This document describes the current 12-minute final-project implementation in
-`CPFA_Base_ARGoS-main_12min`.
+`CPFA_Base_ARGoS-main`.
 
 ## 1. Project Setup
 
@@ -35,8 +35,8 @@ AHCFA is designed as a hybrid:
 - Add GCFA-style spatial memory: limited visited-location reports.
 - Use adaptive QuadTree regions instead of a fixed grid.
 - Score regions with both exploration and exploitation information.
-- Preserve CPFA behavior when exploration hurts, especially Random early/mid
-  collection and clustered resource exploitation.
+- Preserve CPFA behavior when exploration hurts, especially clustered resource
+  exploitation, while adding stronger Random-specific coverage late in the run.
 
 Important note: Arturo's reported `48%` and `35%` improvements are from
 endgame phase time, especially `90% -> 100%`, not from 12-minute collected
@@ -55,9 +55,9 @@ Robots still use the CPFA finite-state machine:
 - `RETURNING`
 
 AHCFA adds shared spatial memory in the loop functions and uses it only when it
-is expected to help. The current implementation intentionally keeps Random
-distribution behavior CPFA-like because earlier adaptive exploration was
-unstable for Random in the 12-minute metric.
+is expected to help. The current implementation is distribution-aware: Random
+uses stronger adaptive coverage because it has weak pheromone/site-fidelity
+gradients, while Powerlaw and Clustered keep more CPFA exploitation.
 
 ## 4. Main Implementation Details
 
@@ -141,6 +141,8 @@ SelectAdaptiveSearchTarget()
 Current tuning:
 
 - Exploration is low early and stronger late.
+- Random doubles the exploration phase multiplier in region scoring because
+  systematic coverage is the main useful signal for that distribution.
 - Pheromone/resource/site-fidelity terms are weighted more strongly than in the
   first AHCFA draft.
 - Resource weight is divided by `sqrt(1 + Visits)` instead of `1 + Visits`, so
@@ -177,8 +179,38 @@ ContinueAdaptiveSweep()
 ```
 
 The sweep creates nine local targets around an adaptive target. In the current
-12-minute tuning, the sweep is used conservatively: only late in the run and not
-in clustered mode. This avoids hurting early CPFA exploitation.
+12-minute tuning, the sweep is used conservatively and is disabled in clustered
+mode. Random starts the sweep after 300 seconds because coverage is useful
+earlier there; Powerlaw and Clustered use the later 480-second start.
+
+### Distribution-Aware Adaptive Targeting
+
+File:
+
+```text
+source/CPFA/CPFA_controller.cpp
+```
+
+After a robot returns to the nest, AHCFA chooses between CPFA targets and
+adaptive QuadTree targets using distribution-specific probabilities.
+
+Current AHCFA probabilities:
+
+```text
+Random:
+  before 4 minutes: 0.04
+  4 to 8 minutes:  0.15
+  after 8 minutes: 0.40
+
+Powerlaw/Clustered default:
+  before 4 minutes: 0.00
+  4 to 8 minutes:  0.05
+  after 8 minutes: 0.25
+```
+
+If no CPFA pheromone or site-fidelity target is selected, Random can fall back
+to adaptive exploration with up to `0.70` probability. Clustered mode caps the
+adaptive probability at `0.05` so robots keep exploiting productive clusters.
 
 ### Opportunistic Pickup While Returning
 
@@ -188,13 +220,10 @@ File:
 source/CPFA/CPFA_controller.cpp
 ```
 
-AHCFA checks for food while returning to the nest in Powerlaw and Clustered
-distributions. If a robot passes over a resource on the way back, it can collect
-it instead of ignoring it. This was the most useful current change for improving
-Powerlaw and Clustered 12-minute scores.
-
-Random distribution is excluded from this extra behavior in the current tuning
-because Random became unstable during small-seed tests.
+AHCFA checks for food while returning to the nest in all three distributions.
+If a robot passes over a resource on the way back, it can collect it instead of
+ignoring it. This gives AHCFA an extra collection opportunity without changing
+the CPFA baseline behavior.
 
 ### CPFA/AHCFA Switch
 
@@ -263,10 +292,10 @@ Total: 24 robots
 
 ## 6. Build And Run
 
-From the 12-minute copy:
+From the project folder:
 
 ```bash
-cd /home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main_12min
+cd /home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main
 export LD_LIBRARY_PATH="$PWD/build/source/Base:$PWD/build/source/CPFA:$LD_LIBRARY_PATH"
 cmake --build build
 ```
@@ -366,13 +395,15 @@ This is calculated separately for Random, Powerlaw, and Clustered.
 
 ## 9. Latest Completed 50-Run Result
 
-Latest completed 50-run result with the current `NestRadius="0.25"` setup:
+Latest stored 50-run result in
+`results/final_project/ahcfa_vs_cpfa_improvement.csv`:
 
 ```text
 Random:
   CPFA mean  = 68.26
-  AHCFA mean = 68.26
-  Improvement = 0.00%
+  AHCFA mean = 70.70
+  Improvement = +3.57%
+  Wilcoxon p = 0.275
 
 Powerlaw:
   CPFA mean  = 81.26
@@ -389,7 +420,10 @@ Clustered:
 
 Interpretation:
 
-- Random is neutral by design in the current tuning.
+- Random now improves in mean score after adding Random-specific adaptive
+  coverage, earlier sweep timing, and returning-trip pickup. Its p-value is
+  still above `0.001`, so it should be reported as a positive but not
+  Arturo-level statistically significant result.
 - Powerlaw improves because productive regions are protected and returning
   robots can opportunistically collect encountered resources.
 - Clustered improves because CPFA exploitation is preserved instead of using
@@ -419,9 +453,10 @@ upload a bounded set of sampled visited locations when they return to the nest.
 The server stores these observations in adaptive QuadTree regions and scores
 candidate regions using both exploration and exploitation terms: visit count,
 pheromone strength, resource discovery weight, and site-fidelity evidence. The
-algorithm remains conservative early in the run and in clustered conditions, so
-it preserves CPFA's ability to exploit productive resource areas while still
-adding directed exploration when resources become harder to find.
+algorithm uses stronger directed coverage for Random, but remains conservative
+in clustered conditions so it preserves CPFA's ability to exploit productive
+resource areas while still adding directed exploration when resources become
+harder to find.
 
 ## 12. Final Report Checklist
 
@@ -435,6 +470,7 @@ Include:
    - QuadTree region memory
    - hybrid scoring
    - clustered-mode protection
+   - distribution-aware adaptive target probabilities
    - conservative local sweep
    - opportunistic pickup while returning
 5. Experimental setup:

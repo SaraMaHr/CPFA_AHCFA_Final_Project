@@ -1,4 +1,4 @@
-# Install script for directory: /home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main_12min
+# Install script for directory: /home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -44,7 +44,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
-  include("/home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main_12min/build/source/cmake_install.cmake")
+  include("/home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/build/source/cmake_install.cmake")
 
 endif()
 
@@ -56,5 +56,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main_12min/build/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/sara/Documents/CPFA_AHCFA_Final_Project/CPFA_Base_ARGoS-main/build/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
