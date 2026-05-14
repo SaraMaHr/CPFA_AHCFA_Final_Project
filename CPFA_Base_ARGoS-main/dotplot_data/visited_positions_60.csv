@@ -1,0 +1,24 @@
+# Visited Positions Export - Simulation Time: 60 seconds
+# Total Positions: 11
+# Total Adaptive Regions: 5
+# Leaf Clusters (Actual Discovered Clusters): 4
+# Format: X,Y (coordinates in meters)
+# Adaptive Regions (Discovered Clusters - Leaf Nodes Only):
+# Region 0: [-4.915,0] x [-4.915,0] Visits=3 ResourceHits=1
+# Region 1: [0,4.915] x [-4.915,0] Visits=3 ResourceHits=1
+# Region 2: [-4.915,0] x [0,4.915] Visits=3 ResourceHits=0
+# Region 3: [0,4.915] x [0,4.915] Visits=1 ResourceHits=0
+# Total Leaf Clusters: 4
+# === VISITED POSITIONS DATA ===
+X,Y
+0.664987,-0.750962
+0.945496,0.421705
+-1.3661,-0.740549
+-1.3562,1.2362
+0.990167,-0.475472
+-1.15517,1.02739
+-1.25764,0.0605615
+1.312,0.751138
+0.847278,-0.995806
+-1.00511,-0.942981
+-0.593804,-1.76967

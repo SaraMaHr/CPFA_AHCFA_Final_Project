@@ -94,7 +94,7 @@ def load_visited_positions(filename):
 def create_cluster_heatmap(positions, metadata, adaptive_regions, output_file=None):
 
     fig, ax = plt.subplots(figsize=(12, 10))
-    valid_regions = [r for r in adaptive_regions if r['Visits'] > 0]
+    valid_regions = [r for r in adaptive_regions ]
 
     if valid_regions:
         max_visits = max(r['Visits'] for r in valid_regions)
@@ -158,7 +158,7 @@ def create_cluster_heatmap(positions, metadata, adaptive_regions, output_file=No
     num_clusters = len(valid_regions)
 
     ax.set_title(
-        f'Adaptive Cluster Heatmap(Random Food)\n'
+        f'Adaptive Cluster Heatmap(Clustered Food)\n'
         f'Time: {sim_time}s | Active Clusters: {num_clusters}',
         fontsize=14,
         fontweight='bold'
